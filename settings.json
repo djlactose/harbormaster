@@ -1,0 +1,10 @@
+{
+  "base_ip": "192.168.1.100",
+  "overrides": {
+    "nginx-container": "192.168.1.101",
+    "db-dashboard": "10.0.0.20"
+  },
+  "show_stopped": false,
+  "show_unmapped": false,
+  "auto_refresh_seconds": 10
+}
