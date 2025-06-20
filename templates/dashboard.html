@@ -161,37 +161,7 @@
     <span id="countdownText" style="margin-left: 10px;"></span>
   </div>
 
-  <div class="container-grid">
-    {% for c in containers %}
-      <div class="container-card" data-has-web="{{ 'yes' if c.web_ports else 'no' }}">
-        <div class="header">
-          <span class="status-dot {{ c.status }}"></span>
-          <img src="{{ c.icon }}" class="icon" alt="icon" onerror="this.src='/static/icons/generic.png'">
-          <div>
-            <strong>{{ c.name }}</strong><br>
-            <div class="image-name">{{ c.image }}</div>
-          </div>
-        </div>
-        {% if c.web_ports %}
-          <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}" onerror="this.style.display='none'">
-        {% endif %}
-        <div class="ports">
-          {% if c.web_ports %}
-            <strong>Web Ports:</strong><br>
-            {% for p, scheme in c.web_ports %}
-              <a href="{{ scheme }}://{{ c.ip }}:{{ p }}" target="_blank">{{ scheme }}://{{ c.ip }}:{{ p }}</a><br>
-            {% endfor %}
-          {% endif %}
-          {% if c.other_ports %}
-            <strong>Non-Web Ports:</strong><br>
-            {% for p in c.other_ports %}
-              {{ c.ip }}:{{ p }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          {% endif %}
-        </div>
-      </div>
-    {% endfor %}
-  </div>
+  {% include "_grid.html" %}
 
   <script>
     function setCookie(name, value, days = 365) {
@@ -201,6 +171,7 @@
     function getCookie(name) {
       return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1];
     }
+
     function postToggleSettings() {
       const form = new URLSearchParams();
       if (document.getElementById("toggleStopped").checked) form.set("show_stopped", "on");
@@ -209,8 +180,9 @@
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" },
         body: form.toString()
-      }).then(() => location.reload());
+      }).then(() => refreshContainerGrid());
     }
+
     document.getElementById("toggleStopped").addEventListener("change", postToggleSettings);
     document.getElementById("toggleUnmapped").addEventListener("change", postToggleSettings);
     document.getElementById("toggleOnlyWeb").addEventListener("change", function () {
@@ -218,6 +190,7 @@
       setCookie("onlyWeb", onlyWeb ? "1" : "0");
       filterOnlyWebContainers(onlyWeb);
     });
+
     function filterOnlyWebContainers(enabled) {
       const cards = document.querySelectorAll('.container-card');
       for (const card of cards) {
@@ -225,11 +198,13 @@
         card.style.display = (enabled && !hasWeb) ? 'none' : '';
       }
     }
+
     function initOnlyWebFilter() {
       const saved = getCookie("onlyWeb") === "1";
       document.getElementById("toggleOnlyWeb").checked = saved;
       filterOnlyWebContainers(saved);
     }
+
     function filterContainers() {
       let input = document.getElementById("filterInput");
       let filter = input.value.toLowerCase();
@@ -239,28 +214,54 @@
         card.style.display = name.includes(filter) ? "" : "none";
       }
     }
+
+    function refreshContainerGrid() {
+      fetch("/grid")
+        .then(response => response.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, "text/html");
+          const newGrid = doc.querySelector(".container-grid");
+          const container = document.querySelector(".container-grid");
+          container.replaceWith(newGrid);
+          filterContainers();
+          filterOnlyWebContainers(document.getElementById("toggleOnlyWeb").checked);
+        });
+    }
+
     let countdownEl = document.getElementById("countdownText");
     let dropdown = document.getElementById("refreshSelect");
-    let refreshRate = parseInt(getCookie("refreshRate") || "10");
+    let refreshRate = parseInt(getCookie("refreshRate") || "{{ settings.auto_refresh_seconds }}");
     let timeLeft = refreshRate;
+
     dropdown.value = refreshRate;
-    function updateCountdown() {
+    setInterval(() => {
       if (refreshRate > 0) {
         timeLeft--;
         if (timeLeft <= 0) {
-          location.reload();
-        } else {
-          countdownEl.textContent = `Refreshing in ${timeLeft}s`;
+          refreshContainerGrid();
+          timeLeft = refreshRate;
         }
+        countdownEl.textContent = `Refreshing in ${timeLeft}s`;
       } else {
         countdownEl.textContent = "Auto-refresh is off";
       }
-    }
+    }, 1000);
+
     dropdown.addEventListener("change", function () {
       refreshRate = parseInt(this.value);
       timeLeft = refreshRate;
       setCookie("refreshRate", refreshRate);
-      countdownEl.textContent = refreshRate > 0 ? `Refreshing in ${timeLeft}s` : "Auto-refresh is off";
+      const form = new URLSearchParams();
+      form.set("auto_refresh_seconds", refreshRate);
+      fetch("/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: form.toString()
+      });
     });
 
     document.getElementById("toggleDark").addEventListener("change", function () {
@@ -268,7 +269,6 @@
     });
 
     initOnlyWebFilter();
-    setInterval(updateCountdown, 1000);
   </script>
 </body>
 </html>

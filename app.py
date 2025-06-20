@@ -100,9 +100,7 @@ def run_screenshot_script(name, url, path):
             log.write("EXCEPTION: " + str(e) + "\n")
         return False
 
-@app.route('/')
-def index():
-    settings = load_settings()
+def build_container_data(settings):
     containers = []
     all_containers = sorted(
         client.containers.list(all=settings["show_stopped"]),
@@ -162,9 +160,19 @@ def index():
             return c["image"].lower()
         return c["name"].lower()
 
-    containers = sorted(containers, key=sort_key)
+    return sorted(containers, key=sort_key)
 
-    return render_template("dashboard.html", containers=containers, refresh=settings["auto_refresh_seconds"], settings=settings)
+@app.route('/')
+def index():
+    settings = load_settings()
+    containers = build_container_data(settings)
+    return render_template("dashboard.html", containers=containers, settings=settings)
+
+@app.route('/grid')
+def container_grid():
+    settings = load_settings()
+    containers = build_container_data(settings)
+    return render_template("_grid.html", containers=containers)
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings_page():
@@ -172,28 +180,11 @@ def settings_page():
     if request.method == 'POST':
         current = load_settings()
 
-        if "base_ip" in request.form:
-            current["base_ip"] = request.form.get("base_ip", current["base_ip"])
-
-        if "auto_refresh_seconds" in request.form:
-            current["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", current["auto_refresh_seconds"]))
-
-        if "sort_by" in request.form:
-            current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
-
-        if "show_stopped" in request.form:
-            current["show_stopped"] = True
-        elif "show_stopped" not in request.form and "show_unmapped" not in request.form and request.headers.get("X-Requested-With"):
-            pass
-        else:
-            current["show_stopped"] = False
-
-        if "show_unmapped" in request.form:
-            current["show_unmapped"] = True
-        elif "show_stopped" not in request.form and "show_unmapped" not in request.form and request.headers.get("X-Requested-With"):
-            pass
-        else:
-            current["show_unmapped"] = False
+        current["base_ip"] = request.form.get("base_ip", current["base_ip"])
+        current["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", current["auto_refresh_seconds"]))
+        current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
+        current["show_stopped"] = "show_stopped" in request.form
+        current["show_unmapped"] = "show_unmapped" in request.form
 
         if "container_name" in request.form and "container_ip" in request.form:
             overrides = {}

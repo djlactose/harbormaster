@@ -1,0 +1,31 @@
+<div class="container-grid">
+  {% for c in containers %}
+    <div class="container-card" data-has-web="{{ 'yes' if c.web_ports else 'no' }}">
+      <div class="header">
+        <span class="status-dot {{ c.status }}"></span>
+        <img src="{{ c.icon }}" class="icon" alt="icon" onerror="this.src='/static/icons/generic.png'">
+        <div>
+          <strong>{{ c.name }}</strong><br>
+          <div class="image-name">{{ c.image }}</div>
+        </div>
+      </div>
+      {% if c.web_ports %}
+        <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}" onerror="this.style.display='none'">
+      {% endif %}
+      <div class="ports">
+        {% if c.web_ports %}
+          <strong>Web Ports:</strong><br>
+          {% for p, scheme in c.web_ports %}
+            <a href="{{ scheme }}://{{ c.ip }}:{{ p }}" target="_blank">{{ scheme }}://{{ c.ip }}:{{ p }}</a><br>
+          {% endfor %}
+        {% endif %}
+        {% if c.other_ports %}
+          <strong>Non-Web Ports:</strong><br>
+          {% for p in c.other_ports %}
+            {{ c.ip }}:{{ p }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
