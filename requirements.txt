@@ -1,5 +1,4 @@
 flask
 docker
 pyppeteer
-pyppeteer-install
 requests

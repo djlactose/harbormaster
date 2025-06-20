@@ -1,26 +1,31 @@
 FROM python:3.11-slim
 
-# Install dependencies for Chromium
+# Install required system packages for pyppeteer / Chromium
 RUN apt-get update && apt-get install -y \
-    wget gnupg ca-certificates \
-    fonts-liberation libnss3 libatk-bridge2.0-0 libxss1 libgtk-3-0 \
-    libasound2 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 \
-    libxshmfence1 libxext6 libegl1 libx11-6 libxfixes3 \
-    --no-install-recommends && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    wget gnupg ca-certificates fonts-liberation libappindicator3-1 \
+    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
+    libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 libnss3 \
+    libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
+    xdg-utils libu2f-udev libvulkan1 libxcb1 libxss1 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Set work directory
 WORKDIR /app
-COPY . .
 
-VOLUME data
-
-RUN mkdir -p static/thumbnails
+# Copy project files
+COPY . /app
 
 # Install Python dependencies
-RUN pip install --no-cache-dir flask docker pyppeteer requests
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Download Chromium (no async needed)
-RUN python -c "from pyppeteer import chromium_downloader; chromium_downloader.download_chromium()"
+# Pre-install Chromium for pyppeteer
+RUN python3 -c "import asyncio; from pyppeteer import launch; asyncio.get_event_loop().run_until_complete(launch(headless=True, args=['--no-sandbox']))"
 
+# Ensure static/thumbnails directory exists
+RUN mkdir -p /app/static/thumbnails
+
+# Expose the app port
 EXPOSE 8080
+
+# Run the Flask app
 CMD ["python", "app.py"]
