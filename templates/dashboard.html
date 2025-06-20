@@ -3,14 +3,31 @@
 <head>
   <title>HarborMaster</title>
   <style>
+    :root {
+      --bg: #f0f4f7;
+      --text: #222;
+      --card: #fff;
+      --border: rgba(0, 0, 0, 0.1);
+      --link: #0066cc;
+    }
+    body.dark {
+      --bg: #1e1e1e;
+      --text: #ddd;
+      --card: #2c2c2c;
+      --border: rgba(255, 255, 255, 0.1);
+      --link: #66aaff;
+    }
+
     body {
       font-family: Arial, sans-serif;
       margin: 40px;
-      background: #f0f4f7;
-      color: #222;
+      background: var(--bg);
+      color: var(--text);
     }
 
-    h1 { color: #333; }
+    h1 { color: var(--text); }
+    a { color: var(--link); }
+
     input[type=text] {
       padding: 6px;
       width: 300px;
@@ -25,10 +42,10 @@
 
     .container-card {
       width: 260px;
-      background: #fff;
+      background: var(--card);
       padding: 15px;
       border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px var(--border);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -50,7 +67,7 @@
       width: 100%;
       height: auto;
       border-radius: 6px;
-      margin-top: 10px;
+      margin-bottom: 10px;
     }
 
     .ports {
@@ -61,7 +78,7 @@
 
     .image-name {
       font-size: 0.75em;
-      color: #666;
+      color: #999;
     }
 
     .switch {
@@ -142,6 +159,12 @@
       <input type="checkbox" id="toggleUnmapped" {% if settings.show_unmapped %}checked{% endif %}>
       <span class="slider round"></span>
     </label>
+
+    <label class="switch-label">Dark Mode</label>
+    <label class="switch">
+      <input type="checkbox" id="toggleDark">
+      <span class="slider round"></span>
+    </label>
   </div>
 
   <div class="container-grid">
@@ -154,6 +177,10 @@
             <div class="image-name">{{ c.image }}</div>
           </div>
         </div>
+
+        {% if c.web_ports %}
+          <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}">
+        {% endif %}
 
         <div class="ports">
           {% if c.web_ports %}
@@ -169,10 +196,6 @@
             {% endfor %}
           {% endif %}
         </div>
-
-        {% if c.web_ports %}
-          <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}">
-        {% endif %}
       </div>
     {% endfor %}
   </div>
@@ -185,16 +208,6 @@
 
     function getCookie(name) {
       return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1];
-    }
-
-    function filterContainers() {
-      let input = document.getElementById("filterInput");
-      let filter = input.value.toLowerCase();
-      let cards = document.getElementsByClassName("container-card");
-      for (let card of cards) {
-        let name = card.querySelector("strong").innerText.toLowerCase();
-        card.style.display = name.includes(filter) ? "" : "none";
-      }
     }
 
     function updateSetting(field, value) {
@@ -214,6 +227,16 @@
     document.getElementById("toggleUnmapped").addEventListener("change", function () {
       updateSetting("show_unmapped", this.checked);
     });
+
+    function filterContainers() {
+      let input = document.getElementById("filterInput");
+      let filter = input.value.toLowerCase();
+      let cards = document.getElementsByClassName("container-card");
+      for (let card of cards) {
+        let name = card.querySelector("strong").innerText.toLowerCase();
+        card.style.display = name.includes(filter) ? "" : "none";
+      }
+    }
 
     let countdownEl = document.getElementById("countdownText");
     let dropdown = document.getElementById("refreshSelect");
@@ -242,6 +265,27 @@
       countdownEl.textContent = refreshRate > 0 ? `Refreshing in ${timeLeft}s` : "Auto-refresh is off";
     });
 
+    function setTheme(theme) {
+      document.body.classList.toggle('dark', theme === 'dark');
+      setCookie("theme", theme);
+    }
+
+    function getSystemTheme() {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? "dark" : "light";
+    }
+
+    function initTheme() {
+      let saved = getCookie("theme");
+      let theme = saved || getSystemTheme();
+      setTheme(theme);
+      document.getElementById("toggleDark").checked = (theme === "dark");
+    }
+
+    document.getElementById("toggleDark").addEventListener("change", function () {
+      setTheme(this.checked ? "dark" : "light");
+    });
+
+    initTheme();
     setInterval(updateCountdown, 1000);
   </script>
 </body>
