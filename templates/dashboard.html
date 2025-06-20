@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta http-equiv="refresh" content="{{ refresh }}">
+  <title>HarborMaster</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background: #f0f4f7;
+      color: #222;
+    }
+    h1 { color: #333; }
+    input[type=text] {
+      padding: 6px;
+      width: 300px;
+    }
+    .container-card {
+      background: #fff;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+    }
+    .container-card img.icon {
+      height: 32px;
+      width: 32px;
+      margin-right: 10px;
+    }
+    .thumbnail {
+      height: 100px;
+      margin-left: auto;
+    }
+    .ports {
+      margin-top: 5px;
+    }
+    .ports strong {
+      display: block;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>HarborMaster Dashboard</h1>
+  <a href="/settings">⚙️ Settings</a><br><br>
+  <input type="text" id="filterInput" onkeyup="filterContainers()" placeholder="Filter containers...">
+
+  {% for c in containers %}
+    <div class="container-card">
+      <img src="{{ c.icon }}" class="icon">
+      <div>
+        <strong>{{ c.name }}</strong>
+        <small>{{ c.image }}</small>
+        <div class="ports">
+          {% if c.web_ports %}
+            <strong>Web Ports:</strong>
+            {% for p, scheme in c.web_ports %}
+              <a href="{{ scheme }}://{{ c.ip }}:{{ p }}" target="_blank">{{ scheme }}://{{ c.ip }}:{{ p }}</a><br>
+            {% endfor %}
+          {% endif %}
+          {% if c.other_ports %}
+            <strong>Non-Web Ports:</strong>
+            {% for p in c.other_ports %}
+              {{ c.ip }}:{{ p }}<br>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+      {% if c.web_ports %}
+        <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}">
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <script>
+    function filterContainers() {
+      let input = document.getElementById("filterInput");
+      let filter = input.value.toLowerCase();
+      let cards = document.getElementsByClassName("container-card");
+      for (let card of cards) {
+        let name = card.querySelector("strong").innerText.toLowerCase();
+        card.style.display = name.includes(filter) ? "" : "none";
+      }
+    }
+  </script>
+</body>
+</html>

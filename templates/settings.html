@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head><title>HarborMaster Settings</title></head>
+<body>
+  <h1>Settings</h1>
+  <form method="post">
+    Base IP: <input type="text" name="base_ip" value="{{ settings.base_ip }}"><br>
+    Auto Refresh (seconds): <input type="number" name="auto_refresh_seconds" value="{{ settings.auto_refresh_seconds }}"><br>
+    <input type="checkbox" name="show_stopped" {% if settings.show_stopped %}checked{% endif %}> Show stopped containers<br>
+    <input type="checkbox" name="show_unmapped" {% if settings.show_unmapped %}checked{% endif %}> Show containers without mapped ports<br>
+    <h2>Container IP Overrides</h2>
+    {% for name, ip in settings.overrides.items() %}
+      {{ name }}: <input type="hidden" name="container_name" value="{{ name }}">
+      <input type="text" name="container_ip" value="{{ ip }}"><br>
+    {% endfor %}
+    <br>New container override:<br>
+    Name: <input type="text" name="container_name"> IP: <input type="text" name="container_ip"><br>
+    <input type="submit" value="Save">
+  </form>
+  <br>
+  <a href="/">Back to Dashboard</a>
+</body>
+</html>

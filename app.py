@@ -5,7 +5,6 @@ app = Flask(__name__, template_folder="templates")
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 SETTINGS_FILE = '/data/settings.json'
 
-# Default settings
 default_settings = {
     "base_ip": "",
     "auto_refresh_seconds": 10,
@@ -14,7 +13,6 @@ default_settings = {
     "overrides": {}
 }
 
-# Utility functions
 def get_host_ip():
     try:
         if platform.system() == "Windows":
@@ -42,16 +40,18 @@ def port_has_https(ip, port):
     except Exception:
         return False
 
-def get_icon_for_service(name):
+def get_icon_for_service(image):
     known_icons = {
         'vaultwarden': 'vaultwarden.png',
         'portainer': 'portainer.png',
         'nginx': 'nginx.png',
         'redis': 'redis.png',
-        'postgres': 'postgres.png'
+        'postgres': 'postgres.png',
+        'mysql': 'mysql.png',
+        'mariadb': 'mariadb.png'
     }
     for key in known_icons:
-        if key in name.lower():
+        if key in image.lower():
             return f"/static/icons/{known_icons[key]}"
     return "/static/icons/generic.png"
 
@@ -102,8 +102,10 @@ def run_screenshot_script(name, url, path):
 def index():
     settings = load_settings()
     containers = []
-    others = []
-    all_containers = client.containers.list(all=True if settings["show_stopped"] else False)
+    all_containers = sorted(
+        client.containers.list(all=True if settings["show_stopped"] else False),
+        key=lambda c: c.name.lower()
+    )
     for c in all_containers:
         if c.name == "harbormaster":
             continue
@@ -112,7 +114,8 @@ def index():
         ports = []
         for bindings in port_data.values():
             if bindings:
-                ports += [b['HostPort'] for b in bindings]
+                ports += [b['HostPort'] for b in bindings if 'HostPort' in b]
+        ports = list(set(ports))  # remove duplicates
 
         if not ports and not settings["show_unmapped"]:
             continue
@@ -133,14 +136,19 @@ def index():
             else:
                 non_web_ports.append(p)
 
-        icon = get_icon_for_service(c.name)
+        image_name = c.image.tags[0] if c.image.tags else c.image.short_id
+        icon = get_icon_for_service(image_name)
 
-        if web_ports:
-            containers.append({'name': c.name, 'ports': web_ports, 'ip': ip, 'icon': icon})
-        if non_web_ports:
-            others.append({'name': c.name, 'ports': non_web_ports, 'ip': ip, 'icon': icon})
+        containers.append({
+            'name': c.name,
+            'image': image_name,
+            'web_ports': web_ports,
+            'other_ports': non_web_ports,
+            'ip': ip,
+            'icon': icon
+        })
 
-    return render_template("dashboard.html", containers=containers, others=others, refresh=settings["auto_refresh_seconds"])
+    return render_template("dashboard.html", containers=containers, refresh=settings["auto_refresh_seconds"])
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings_page():
@@ -176,13 +184,11 @@ def thumbnail(name):
     url = f"http://{ip}:{port}"
     path = get_thumbnail_path(cname, port)
 
-    print(f"[DEBUG] Thumbnail expected at: {path}")
-    print(f"[DEBUG] Absolute file exists? {os.path.isfile(path)}")
-    print(f"[DEBUG] List of files in that directory:")
-    print(os.listdir(os.path.dirname(path)))
-
     if not os.path.exists(path):
-        print(f"[DEBUG] Generating screenshot for {name} at {url} via subprocess")
+        has_web = port_has_http(ip, port) or port_has_https(ip, port)
+        if not has_web:
+            return '', 204
+
         success = run_screenshot_script(f"{cname}_{port}", url, path)
         if not success:
             return "[500] Subprocess failed to generate screenshot", 500
