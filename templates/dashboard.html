@@ -42,7 +42,17 @@
     }
     .header-title { display: flex; align-items: center; gap: 20px; }
     .legacy-link { font-size: 0.9em; }
-    .container-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px; }
+    .container-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 20px;
+      opacity: 1;
+      transition: opacity 0.3s ease-in-out;
+    }
+    .container-grid.fade-out {
+      opacity: 0.1;
+    }
     .container-card {
       width: 260px;
       background: var(--card);
@@ -172,6 +182,14 @@
       return document.cookie.split('; ').find(row => row.startsWith(name + '='))?.split('=')[1];
     }
 
+    function debounce(fn, delay = 300) {
+      let timer;
+      return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+      };
+    }
+
     function postToggleSettings() {
       const form = new URLSearchParams();
       if (document.getElementById("toggleStopped").checked) form.set("show_stopped", "on");
@@ -183,8 +201,10 @@
       }).then(() => refreshContainerGrid());
     }
 
-    document.getElementById("toggleStopped").addEventListener("change", postToggleSettings);
-    document.getElementById("toggleUnmapped").addEventListener("change", postToggleSettings);
+    const debouncedToggle = debounce(postToggleSettings, 300);
+    document.getElementById("toggleStopped").addEventListener("change", debouncedToggle);
+    document.getElementById("toggleUnmapped").addEventListener("change", debouncedToggle);
+
     document.getElementById("toggleOnlyWeb").addEventListener("change", function () {
       const onlyWeb = this.checked;
       setCookie("onlyWeb", onlyWeb ? "1" : "0");
@@ -216,16 +236,24 @@
     }
 
     function refreshContainerGrid() {
+      const container = document.querySelector(".container-grid");
+      container.classList.add("fade-out");
+
       fetch("/grid")
         .then(response => response.text())
         .then(html => {
           const parser = new DOMParser();
           const doc = parser.parseFromString(html, "text/html");
           const newGrid = doc.querySelector(".container-grid");
-          const container = document.querySelector(".container-grid");
           container.replaceWith(newGrid);
           filterContainers();
           filterOnlyWebContainers(document.getElementById("toggleOnlyWeb").checked);
+        })
+        .finally(() => {
+          setTimeout(() => {
+            const updated = document.querySelector(".container-grid");
+            updated.classList.remove("fade-out");
+          }, 50);
         });
     }
 
