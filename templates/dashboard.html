@@ -198,7 +198,10 @@
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" },
         body: form.toString()
-      }).then(() => refreshContainerGrid());
+      }).then(() => {
+        // Give backend time to persist before refreshing grid
+        setTimeout(refreshContainerGrid, 300);
+      });
     }
 
     const debouncedToggle = debounce(postToggleSettings, 300);

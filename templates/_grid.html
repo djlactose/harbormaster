@@ -9,9 +9,9 @@
           <div class="image-name">{{ c.image }}</div>
         </div>
       </div>
-      {% if c.web_ports %}
-        <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}" onerror="this.style.display='none'">
-      {% endif %}
+    {% if c.web_ports %}
+        <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}" onerror="this.onerror=null; this.src='/static/icons/no-thumb.png';">
+    {% endif %}
       <div class="ports">
         {% if c.web_ports %}
           <strong>Web Ports:</strong><br>
