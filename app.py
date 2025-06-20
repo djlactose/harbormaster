@@ -41,18 +41,19 @@ def port_has_https(ip, port):
         return False
 
 def get_icon_for_service(image):
-    known_icons = {
-        'vaultwarden': 'vaultwarden.png',
-        'portainer': 'portainer.png',
-        'nginx': 'nginx.png',
-        'redis': 'redis.png',
-        'postgres': 'postgres.png',
-        'mysql': 'mysql.png',
-        'mariadb': 'mariadb.png'
+    icon_map = {
+        'postgres': 'postgresql',
+        'portainer': 'portainer',
+        'vaultwarden': 'bitwarden',
+        'mariadb': 'mariadb',
+        'mysql': 'mysql',
+        'redis': 'redis',
+        'nginx': 'nginx'
     }
-    for key in known_icons:
-        if key in image.lower():
-            return f"/static/icons/{known_icons[key]}"
+    image = image.lower()
+    for key in icon_map:
+        if key in image:
+            return f"https://cdn.simpleicons.org/{icon_map[key]}"
     return "/static/icons/generic.png"
 
 def load_settings():
@@ -148,7 +149,7 @@ def index():
             'icon': icon
         })
 
-    return render_template("dashboard.html", containers=containers, refresh=settings["auto_refresh_seconds"])
+    return render_template("dashboard.html", containers=containers, refresh=settings["auto_refresh_seconds"], settings=settings)
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings_page():
