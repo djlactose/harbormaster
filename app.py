@@ -17,8 +17,7 @@ default_settings = {
 def get_host_ip():
     try:
         if platform.system() == "Windows":
-            hostname = socket.gethostname()
-            return socket.gethostbyname(hostname)
+            return socket.gethostbyname(socket.gethostname())
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
@@ -29,15 +28,13 @@ def get_host_ip():
 
 def port_has_http(ip, port):
     try:
-        r = requests.get(f"http://{ip}:{port}", timeout=2)
-        return r.ok
+        return requests.get(f"http://{ip}:{port}", timeout=2).ok
     except Exception:
         return False
 
 def port_has_https(ip, port):
     try:
-        r = requests.get(f"https://{ip}:{port}", timeout=2, verify=False)
-        return r.ok
+        return requests.get(f"https://{ip}:{port}", timeout=2, verify=False).ok
     except Exception:
         return False
 
@@ -79,7 +76,6 @@ def run_screenshot_script(name, url, path):
     try:
         with open(log_path, "a") as log:
             log.write(f">>> RUN: python3 screenshot.py {name} {url}\n")
-
         result = subprocess.run(
             ["python3", "screenshot.py", name, url],
             stdout=subprocess.PIPE,
@@ -87,14 +83,11 @@ def run_screenshot_script(name, url, path):
             text=True,
             cwd="/app"
         )
-
         with open(log_path, "a") as log:
             log.write(f"Exit code: {result.returncode}\n")
             log.write("STDOUT:\n" + result.stdout + "\n")
             log.write("STDERR:\n" + result.stderr + "\n")
-
         return result.returncode == 0 and os.path.exists(path)
-
     except Exception as e:
         with open(log_path, "a") as log:
             log.write("EXCEPTION: " + str(e) + "\n")
@@ -176,31 +169,35 @@ def container_grid():
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings_page():
-    settings = load_settings()
+    current = load_settings()
     if request.method == 'POST':
-        current = load_settings()
-
+        # sort, base_ip, auto-refresh
+        current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
         current["base_ip"] = request.form.get("base_ip", current["base_ip"])
         current["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", current["auto_refresh_seconds"]))
-        current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
         current["show_stopped"] = "show_stopped" in request.form
         current["show_unmapped"] = "show_unmapped" in request.form
 
+        # inline container IP override (single entry update)
         if "container_name" in request.form and "container_ip" in request.form:
+            name = request.form.get("container_name").strip()
+            ip = request.form.get("container_ip").strip()
+            if name and ip:
+                current["overrides"][name] = ip
+
+        # batch update from legacy settings form
+        elif "container_name[]" in request.form and "container_ip[]" in request.form:
             overrides = {}
-            for name, ip in zip(request.form.getlist("container_name"), request.form.getlist("container_ip")):
+            for name, ip in zip(request.form.getlist("container_name[]"), request.form.getlist("container_ip[]")):
                 if name.strip() and ip.strip():
                     overrides[name.strip()] = ip.strip()
             current["overrides"] = overrides
-        else:
-            current["overrides"] = current.get("overrides", {})
 
         save_settings(current)
-
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return '', 204
         return redirect('/')
-    return render_template("settings.html", settings=settings)
+    return render_template("settings.html", settings=current)
 
 @app.route('/thumbnail/<name>')
 def thumbnail(name):
@@ -208,7 +205,6 @@ def thumbnail(name):
     if len(parts) != 2:
         return '', 404
     cname, port = parts
-
     if cname == "harbormaster":
         return '', 204
 
@@ -218,12 +214,9 @@ def thumbnail(name):
     path = get_thumbnail_path(cname, port)
 
     if not os.path.exists(path):
-        has_web = port_has_http(ip, port) or port_has_https(ip, port)
-        if not has_web:
+        if not (port_has_http(ip, port) or port_has_https(ip, port)):
             return '', 204
-
-        success = run_screenshot_script(f"{cname}_{port}", url, path)
-        if not success:
+        if not run_screenshot_script(f"{cname}_{port}", url, path):
             return "[500] Subprocess failed to generate screenshot", 500
 
     if not os.path.exists(path):
