@@ -10,7 +10,8 @@ default_settings = {
     "auto_refresh_seconds": 10,
     "show_stopped": False,
     "show_unmapped": False,
-    "overrides": {}
+    "overrides": {},
+    "sort_by": "name"
 }
 
 def get_host_ip():
@@ -104,7 +105,7 @@ def index():
     settings = load_settings()
     containers = []
     all_containers = sorted(
-        client.containers.list(all=True if settings["show_stopped"] else False),
+        client.containers.list(all=settings["show_stopped"]),
         key=lambda c: c.name.lower()
     )
     for c in all_containers:
@@ -116,7 +117,7 @@ def index():
         for bindings in port_data.values():
             if bindings:
                 ports += [b['HostPort'] for b in bindings if 'HostPort' in b]
-        ports = list(set(ports))  # remove duplicates
+        ports = list(set(ports))
 
         if not ports and not settings["show_unmapped"]:
             continue
@@ -146,8 +147,22 @@ def index():
             'web_ports': web_ports,
             'other_ports': non_web_ports,
             'ip': ip,
-            'icon': icon
+            'icon': icon,
+            'status': c.status
         })
+
+    sort_by = settings.get("sort_by", "name")
+
+    def sort_key(c):
+        if sort_by == "status":
+            return c["status"]
+        elif sort_by == "ports":
+            return len(c["web_ports"]) + len(c["other_ports"])
+        elif sort_by == "image":
+            return c["image"].lower()
+        return c["name"].lower()
+
+    containers = sorted(containers, key=sort_key)
 
     return render_template("dashboard.html", containers=containers, refresh=settings["auto_refresh_seconds"], settings=settings)
 
@@ -155,18 +170,44 @@ def index():
 def settings_page():
     settings = load_settings()
     if request.method == 'POST':
-        settings["base_ip"] = request.form.get("base_ip", "localhost")
-        settings["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", 10))
-        settings["show_stopped"] = "show_stopped" in request.form
-        settings["show_unmapped"] = "show_unmapped" in request.form
+        current = load_settings()
 
-        overrides = {}
-        for name, ip in zip(request.form.getlist("container_name"), request.form.getlist("container_ip")):
-            if name.strip() and ip.strip():
-                overrides[name.strip()] = ip.strip()
-        settings["overrides"] = overrides
+        if "base_ip" in request.form:
+            current["base_ip"] = request.form.get("base_ip", current["base_ip"])
 
-        save_settings(settings)
+        if "auto_refresh_seconds" in request.form:
+            current["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", current["auto_refresh_seconds"]))
+
+        if "sort_by" in request.form:
+            current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
+
+        if "show_stopped" in request.form:
+            current["show_stopped"] = True
+        elif "show_stopped" not in request.form and "show_unmapped" not in request.form and request.headers.get("X-Requested-With"):
+            pass
+        else:
+            current["show_stopped"] = False
+
+        if "show_unmapped" in request.form:
+            current["show_unmapped"] = True
+        elif "show_stopped" not in request.form and "show_unmapped" not in request.form and request.headers.get("X-Requested-With"):
+            pass
+        else:
+            current["show_unmapped"] = False
+
+        if "container_name" in request.form and "container_ip" in request.form:
+            overrides = {}
+            for name, ip in zip(request.form.getlist("container_name"), request.form.getlist("container_ip")):
+                if name.strip() and ip.strip():
+                    overrides[name.strip()] = ip.strip()
+            current["overrides"] = overrides
+        else:
+            current["overrides"] = current.get("overrides", {})
+
+        save_settings(current)
+
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return '', 204
         return redirect('/')
     return render_template("settings.html", settings=settings)
 
