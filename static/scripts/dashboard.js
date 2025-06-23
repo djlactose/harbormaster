@@ -121,9 +121,15 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("toggleDark").addEventListener("change", function () {
     setTheme(this.checked ? 'dark' : 'light');
   });
+
   document.getElementById("sortOrder")?.addEventListener("change", function () {
     const form = new URLSearchParams();
     form.set("sort_by", this.value);
+
+    // Include toggle states with sort
+    if (document.getElementById("toggleStopped").checked) form.set("show_stopped", "on");
+    if (document.getElementById("toggleUnmapped").checked) form.set("show_unmapped", "on");
+
     fetch("/settings", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" },
@@ -131,7 +137,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }).then(() => refreshContainerGrid());
   });
 
-  // auto-refresh countdown
   let countdownEl = document.getElementById("countdownText");
   let dropdown = document.getElementById("refreshSelect");
   let refreshRate = parseInt(getCookie("refreshRate") || dropdown?.value || "10");

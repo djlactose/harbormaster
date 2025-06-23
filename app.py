@@ -167,37 +167,9 @@ def container_grid():
     containers = build_container_data(settings)
     return render_template("_grid.html", containers=containers)
 
-@app.route('/settings', methods=['GET', 'POST'])
-def settings_page():
-    current = load_settings()
-    if request.method == 'POST':
-        # sort, base_ip, auto-refresh
-        current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
-        current["base_ip"] = request.form.get("base_ip", current["base_ip"])
-        current["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", current["auto_refresh_seconds"]))
-        current["show_stopped"] = "show_stopped" in request.form
-        current["show_unmapped"] = "show_unmapped" in request.form
-
-        # inline container IP override (single entry update)
-        if "container_name" in request.form and "container_ip" in request.form:
-            name = request.form.get("container_name").strip()
-            ip = request.form.get("container_ip").strip()
-            if name and ip:
-                current["overrides"][name] = ip
-
-        # batch update from legacy settings form
-        elif "container_name[]" in request.form and "container_ip[]" in request.form:
-            overrides = {}
-            for name, ip in zip(request.form.getlist("container_name[]"), request.form.getlist("container_ip[]")):
-                if name.strip() and ip.strip():
-                    overrides[name.strip()] = ip.strip()
-            current["overrides"] = overrides
-
-        save_settings(current)
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return '', 204
-        return redirect('/')
-    return render_template("settings.html", settings=current)
+@app.route('/settings')
+def deprecated_settings():
+    return "Settings have moved to the main dashboard.", 410
 
 @app.route('/thumbnail/<name>')
 def thumbnail(name):
