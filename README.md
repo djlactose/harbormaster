@@ -19,6 +19,18 @@
 
 ---
 
+## 🐳 Docker Image
+
+Use the prebuilt image from Docker Hub:
+
+```bash
+docker pull djlactose/harbormaster
+```
+
+Repository: [https://hub.docker.com/r/djlactose/harbormaster](https://hub.docker.com/r/djlactose/harbormaster)
+
+---
+
 ## 🧱 Requirements
 
 - Python 3.8+
