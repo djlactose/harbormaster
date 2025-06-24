@@ -68,31 +68,6 @@ def save_settings(data):
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(data, f, indent=2)
 
-def get_thumbnail_path(name, port):
-    return os.path.join(app.root_path, "static", "thumbnails", f"{name}_{port}.png")
-
-def run_screenshot_script(name, url, path):
-    log_path = os.path.join(app.root_path, "screenshot.log")
-    try:
-        with open(log_path, "a") as log:
-            log.write(f">>> RUN: python3 screenshot.py {name} {url}\n")
-        result = subprocess.run(
-            ["python3", "screenshot.py", name, url],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd="/app"
-        )
-        with open(log_path, "a") as log:
-            log.write(f"Exit code: {result.returncode}\n")
-            log.write("STDOUT:\n" + result.stdout + "\n")
-            log.write("STDERR:\n" + result.stderr + "\n")
-        return result.returncode == 0 and os.path.exists(path)
-    except Exception as e:
-        with open(log_path, "a") as log:
-            log.write("EXCEPTION: " + str(e) + "\n")
-        return False
-
 def build_container_data(settings):
     containers = []
     all_containers = sorted(
@@ -167,9 +142,29 @@ def container_grid():
     containers = build_container_data(settings)
     return render_template("_grid.html", containers=containers)
 
-@app.route('/settings')
-def deprecated_settings():
-    return "Settings have moved to the main dashboard.", 410
+@app.route('/settings', methods=['POST'])
+def update_settings():
+    current = load_settings()
+
+    # Update submitted values, preserve others
+    current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
+    current["base_ip"] = request.form.get("base_ip", current.get("base_ip", "localhost"))
+    current["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", current.get("auto_refresh_seconds", 10)))
+
+    current["show_stopped"] = "show_stopped" in request.form or current.get("show_stopped", False)
+    current["show_unmapped"] = "show_unmapped" in request.form or current.get("show_unmapped", False)
+
+    if "container_name" in request.form and "container_ip" in request.form:
+        name = request.form.get("container_name").strip()
+        ip = request.form.get("container_ip").strip()
+        if name and ip:
+            current["overrides"][name] = ip
+
+    save_settings(current)
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return '', 204
+    return redirect('/')
 
 @app.route('/thumbnail/<name>')
 def thumbnail(name):
@@ -183,12 +178,19 @@ def thumbnail(name):
     settings = load_settings()
     ip = settings["overrides"].get(cname, settings["base_ip"])
     url = f"http://{ip}:{port}"
-    path = get_thumbnail_path(cname, port)
+    path = os.path.join(app.root_path, "static", "thumbnails", f"{cname}_{port}.png")
 
     if not os.path.exists(path):
         if not (port_has_http(ip, port) or port_has_https(ip, port)):
             return '', 204
-        if not run_screenshot_script(f"{cname}_{port}", url, path):
+        try:
+            subprocess.run(
+                ["python3", "screenshot.py", f"{cname}_{port}", url],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True
+            )
+        except subprocess.CalledProcessError:
             return "[500] Subprocess failed to generate screenshot", 500
 
     if not os.path.exists(path):
@@ -197,7 +199,6 @@ def thumbnail(name):
     try:
         return send_file(path, mimetype='image/png')
     except Exception as e:
-        print(f"[ERROR] Failed to send file: {e}")
         return f"[500] Send file error: {e}", 500
 
 if __name__ == '__main__':
