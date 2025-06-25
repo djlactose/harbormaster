@@ -88,9 +88,7 @@
           <div>
             <strong>IP:</strong>
             <span class="ip-display">{{ c.ip }}</span>
-            {% if not c.is_swarm %}
               <span class="ip-edit" onclick="editIp(this)">[Edit]</span>
-            {% endif %}
           </div>
           <div class="ip-input" style="display:none;">
             <input type="text" value="{{ c.ip }}">

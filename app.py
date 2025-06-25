@@ -1,44 +1,30 @@
 from flask import Flask, render_template, request, redirect, send_file
-import docker, json, os, socket, subprocess, requests, platform
+import docker, json, os, socket, subprocess, requests, platform, time
 
 app = Flask(__name__, template_folder="templates")
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 SETTINGS_FILE = '/data/settings.json'
 
-default_settings = {
-    "base_ip": "",
-    "auto_refresh_seconds": 10,
-    "show_stopped": False,
-    "show_unmapped": False,
-    "overrides": {},
-    "sort_by": "name"
-}
+# 🔁 Port check cache
+_port_check_cache = {}
 
-def get_host_ip():
+def check_port(ip, port, scheme):
+    key = f"{ip}:{port}/{scheme}"
+    now = time.time()
+    if key in _port_check_cache and now - _port_check_cache[key][0] < 10:
+        return _port_check_cache[key][1]
     try:
-        if platform.system() == "Windows":
-            return socket.gethostbyname(socket.gethostname())
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        if scheme == "http":
+            ok = requests.get(f"http://{ip}:{port}", timeout=1).ok
+        else:
+            ok = requests.get(f"https://{ip}:{port}", timeout=1, verify=False).ok
     except Exception:
-        return "localhost"
-
-def port_has_http(ip, port):
-    try:
-        return requests.get(f"http://{ip}:{port}", timeout=2).ok
-    except Exception:
-        return False
-
-def port_has_https(ip, port):
-    try:
-        return requests.get(f"https://{ip}:{port}", timeout=2, verify=False).ok
-    except Exception:
-        return False
+        ok = False
+    _port_check_cache[key] = (now, ok)
+    return ok
 
 def get_icon_for_service(image):
+    image = image.split('@')[0]
     icon_map = {
         'postgres': 'postgresql',
         'portainer': 'portainer',
@@ -55,7 +41,14 @@ def get_icon_for_service(image):
     return "/static/icons/generic.png"
 
 def load_settings():
-    settings = default_settings.copy()
+    settings = {
+        "base_ip": "",
+        "auto_refresh_seconds": 10,
+        "show_stopped": False,
+        "show_unmapped": False,
+        "overrides": {},
+        "sort_by": "name"
+    }
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             settings.update(json.load(f))
@@ -63,10 +56,17 @@ def load_settings():
         settings["base_ip"] = get_host_ip()
     return settings
 
-def save_settings(data):
-    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
-    with open(SETTINGS_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+def get_host_ip():
+    try:
+        if platform.system() == "Windows":
+            return socket.gethostbyname(socket.gethostname())
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
 
 def get_swarm_services(settings):
     services = []
@@ -84,22 +84,21 @@ def get_swarm_services(settings):
             for p in ports:
                 port = p.get("PublishedPort")
                 proto = p.get("Protocol", "tcp")
-
                 if not port:
                     continue
 
-                ip = settings["base_ip"]
+                ip = settings["overrides"].get(spec.get("Name", svc.name), settings["base_ip"])
                 if proto == "tcp":
-                    if port_has_http(ip, port):
+                    if check_port(ip, port, "http"):
                         web_ports.append((port, "http"))
-                    elif port_has_https(ip, port):
+                    elif check_port(ip, port, "https"):
                         web_ports.append((port, "https"))
                     else:
                         other_ports.append(f"{port}/tcp")
                 elif proto == "udp":
                     other_ports.append(f"{port}/udp")
 
-            image = container_spec.get("Image", "unknown")
+            image = container_spec.get("Image", "unknown").split('@')[0]
             name = spec.get("Name", svc.name)
             icon = get_icon_for_service(image)
 
@@ -108,7 +107,7 @@ def get_swarm_services(settings):
                 'image': image,
                 'web_ports': web_ports,
                 'other_ports': other_ports,
-                'ip': settings["base_ip"],
+                'ip': ip,
                 'icon': icon,
                 'status': mode.lower(),
                 'is_swarm': True
@@ -125,7 +124,7 @@ def build_container_data(settings):
     )
     for c in all_containers:
         if "com.docker.swarm.service.name" in c.labels:
-            continue  # skip Swarm task containers
+            continue
         if c.name == "harbormaster":
             continue
 
@@ -144,18 +143,15 @@ def build_container_data(settings):
         non_web_ports = []
 
         for p in ports:
-            scheme = None
-            if port_has_https(ip, p):
-                scheme = "https"
-            elif port_has_http(ip, p):
-                scheme = "http"
-
-            if scheme:
-                web_ports.append((p, scheme))
+            if check_port(ip, p, "https"):
+                web_ports.append((p, "https"))
+            elif check_port(ip, p, "http"):
+                web_ports.append((p, "http"))
             else:
                 non_web_ports.append(f"{p}/tcp")
 
         image_name = c.image.tags[0] if c.image.tags else c.image.short_id
+        image_name = image_name.split('@')[0]
         icon = get_icon_for_service(image_name)
 
         containers.append({
@@ -232,7 +228,7 @@ def thumbnail(name):
     path = os.path.join(app.root_path, "static", "thumbnails", f"{cname}_{port}.png")
 
     if not os.path.exists(path):
-        if not (port_has_http(ip, port) or port_has_https(ip, port)):
+        if not (check_port(ip, port, "http") or check_port(ip, port, "https")):
             return '', 204
         try:
             subprocess.run(

@@ -1,7 +1,13 @@
 FROM python:3.11-slim
 
 # Copy project files
-COPY . /app
+COPY static/ /app/static/
+COPY templates/ /app/templates/
+COPY app.py /app/app.py 
+COPY screenshot.py /app/screenshot.py
+COPY settings.json /data/settings.json
+COPY requirements.txt /app/requirements.txt
+COPY LICENSE /app/LICENSE
 
 # Expose the app port
 EXPOSE 8080
