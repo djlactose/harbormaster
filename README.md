@@ -1,85 +1,77 @@
 # HarborMaster
 
-**HarborMaster** is a lightweight web dashboard that provides a clean, responsive homepage for managing your running Docker containers. It automatically detects container ports, shows thumbnails of web UIs, and lets you customize access points.
+**HarborMaster** is a lightweight web dashboard for your Docker ecosystem. It displays running containers and Swarm services with clickable web links, auto-refresh, thumbnail previews, and intuitive sorting/filtering — all without any database.
 
 ---
 
-## 🚢 Features
+## ⚓ Features
 
-- ⚓ Auto-discovers running Docker containers
-- 🌐 Clickable links for HTTP/HTTPS web ports
-- 🖼️ Automatic UI screenshots for web-enabled containers
-- 🔄 Auto-refresh with customizable intervals
-- 🎛️ Toggle to show stopped or unmapped containers
-- 🌙 Light/Dark mode with theme toggle
-- ✏️ Inline per-container IP overrides
-- 🔍 Search and filter containers by name
-- 📊 Sort containers by name, status, image, or number of ports
-- 📁 No external database — configuration is saved to a local JSON file
+- ✅ Unified view of:
+  - Docker containers
+  - Docker Swarm services
+- 🔍 Container and service discovery via Docker socket
+- 🌐 Clickable web links for HTTP/HTTPS ports
+- 🧭 Supports TCP **and** UDP port visibility
+- 🖼️ Live thumbnail previews of web UIs
+- ✏️ Per-container IP overrides (for reverse proxies or remote hosts)
+- 🌓 Light & dark mode with theme toggle
+- 🔄 Auto-refresh with configurable intervals
+- 🧰 Sort by name, image, port count, or status
+- 🧪 All settings saved locally as JSON — no database needed
 
 ---
 
 ## 🐳 Docker Image
 
-Use the prebuilt image from Docker Hub:
+You can pull and run the official image from Docker Hub:
 
 ```bash
 docker pull djlactose/harbormaster
 ```
 
-Repository: [https://hub.docker.com/r/djlactose/harbormaster](https://hub.docker.com/r/djlactose/harbormaster)
-
----
-
-## 🧱 Requirements
-
-- Python 3.8+
-- Docker daemon (socket access)
-- Headless Chromium support (via `pyppeteer`)
-
-### Python dependencies
-
-See `requirements.txt`:
-
-```bash
-pip install -r requirements.txt
-```
+🔗 [Docker Hub Repository](https://hub.docker.com/r/djlactose/harbormaster)
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Clone the repo
+### 1. Clone and Build
 
 ```bash
 git clone https://github.com/djlactose/harbormaster.git
 cd harbormaster
-```
-
-### 2. Build and run with Docker
-
-```bash
 docker build -t harbormaster .
-docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock --name harbormaster harbormaster
 ```
 
-You can also persist settings by mounting a volume:
+### 2. Run It (Bind Docker Socket)
 
 ```bash
-docker run -d -p 8080:8080 -v /var/run/docker.sock:/var/run/docker.sock -v $(pwd)/data:/data --name harbormaster harbormaster
+docker run -d -p 8080:8080 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v $(pwd)/data:/data \
+  --name harbormaster \
+  harbormaster
 ```
+
+> Mounting `/data` allows settings to persist across restarts.
 
 ---
 
 ## ⚙️ Configuration
 
-Settings are stored in `/data/settings.json` and include:
+All settings are stored in a JSON file:
+
+```json
+/data/settings.json
+```
+
+Example contents:
 
 ```json
 {
-  "base_ip": "192.168.1.100",
+  "base_ip": "192.168.1.10",
   "overrides": {
-    "nginx-container": "192.168.1.101"
+    "nginx": "192.168.1.12"
   },
   "show_stopped": true,
   "show_unmapped": false,
@@ -88,41 +80,82 @@ Settings are stored in `/data/settings.json` and include:
 }
 ```
 
-All settings can now be controlled directly from the web UI.
+These can also be changed from the dashboard UI.
 
 ---
 
-## 🧪 Screenshot Generation
+## 🐝 Swarm Support
 
-Screenshots of web-enabled containers are automatically generated using `pyppeteer`. They are saved in:
+- Swarm services are shown with a Swarm icon.
+- Published ports (TCP/UDP) are detected and displayed.
+- Underlying task containers are **excluded** to avoid duplication.
+- Clickable links are generated if a service responds to HTTP or HTTPS.
 
-```
-/static/thumbnails/
-```
-
-You can manually trigger this by visiting the dashboard, or call:
+To deploy HarborMaster to all nodes in a Swarm:
 
 ```bash
-python screenshot.py <container_port_name> <url>
+docker service create --mode global \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p 8080:8080 \
+  --name harbormaster \
+  djlactose/harbormaster
 ```
 
 ---
 
-## 🎨 Theming & Icons
+## 📸 Screenshot Thumbnails
 
-- Logos and icons are served from `/static/icons/`
-- You can override container icons by name
-- Dark and light mode logos are supported
+HarborMaster attempts to take live screenshots of container web UIs.
+
+- Saved in `/static/thumbnails/`
+- Uses `pyppeteer` under the hood
+- Only attempts capture if HTTP/HTTPS is detected
+
+You can trigger a screenshot manually:
+
+```bash
+python screenshot.py <name_port> <url>
+```
 
 ---
 
-## 🛟 Credits
+## 🎨 Customization
 
-Created by [djlactose](https://github.com/djlactose).  
-Modified and maintained for UI improvements, sorting, AJAX refresh, and theming.
+- `static/icons/` contains:
+  - `generic.png` for unknown services
+  - `swarm.png` for Docker Swarm services
+  - `logo_light.png` / `logo_dark.png` for branding
+
+You can add custom icons by service name or image match.
+
+---
+
+## 🧪 Development
+
+Dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then run locally:
+
+```bash
+python app.py
+```
+
+Access at: `http://localhost:8080`
 
 ---
 
 ## 📜 License
 
-MIT License. Use freely and contribute if you'd like!
+MIT License  
+Copyright © djlactose
+
+---
+
+## 🙌 Credits
+
+Built on the Docker SDK for Python.  
+Enhanced UI + Swarm support by community contributors.
