@@ -1,31 +1,21 @@
 FROM python:3.11-slim
 
-# Install required system packages for pyppeteer / Chromium
-RUN apt-get update && apt-get install -y \
-    wget gnupg ca-certificates fonts-liberation libappindicator3-1 \
-    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
-    libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 libnss3 \
-    libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
-    xdg-utils libu2f-udev libvulkan1 libxcb1 libxss1 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Copy project files
+COPY . /app
+
+# Expose the app port
+EXPOSE 8080
 
 # Set work directory
 WORKDIR /app
 
-# Copy project files
-COPY . /app
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Pre-install Chromium for pyppeteer
-RUN python3 -c "import asyncio; from pyppeteer import launch; asyncio.get_event_loop().run_until_complete(launch(headless=True, args=['--no-sandbox']))"
-
-# Ensure static/thumbnails directory exists
-RUN mkdir -p /app/static/thumbnails
-
-# Expose the app port
-EXPOSE 8080
+# Install required system packages for pyppeteer / Chromium
+RUN apt-get update && \ 
+apt-get install -y wget gnupg ca-certificates fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 xdg-utils libu2f-udev libvulkan1 libxcb1 libxss1 && \
+apt-get clean && rm -rf /var/lib/apt/lists/* && \
+pip install --no-cache-dir -r requirements.txt && \
+python3 -c "import asyncio; from pyppeteer import launch; asyncio.get_event_loop().run_until_complete(launch(headless=True, args=['--no-sandbox']))" && \
+mkdir -p /app/static/thumbnails
 
 # Run the Flask app
 CMD ["python", "app.py"]
