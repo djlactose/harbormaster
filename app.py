@@ -5,26 +5,44 @@ app = Flask(__name__, template_folder="templates")
 client = docker.DockerClient(base_url='unix://var/run/docker.sock')
 SETTINGS_FILE = '/data/settings.json'
 
-# 🔁 Port check cache
+default_settings = {
+    "base_ip": "",
+    "auto_refresh_seconds": 10,
+    "show_stopped": False,
+    "show_unmapped": False,
+    "overrides": {},
+    "sort_by": "name"
+}
+
+# Port check result cache
 _port_check_cache = {}
 
 def check_port(ip, port, scheme):
-    key = f"{ip}:{port}/{scheme}"
+    key = f"{scheme}://{ip}:{port}"
     now = time.time()
     if key in _port_check_cache and now - _port_check_cache[key][0] < 10:
         return _port_check_cache[key][1]
     try:
-        if scheme == "http":
-            ok = requests.get(f"http://{ip}:{port}", timeout=1).ok
-        else:
-            ok = requests.get(f"https://{ip}:{port}", timeout=1, verify=False).ok
+        resp = requests.get(f"{scheme}://{ip}:{port}", timeout=2, verify=(scheme != "https"))
+        ok = resp.ok
     except Exception:
         ok = False
     _port_check_cache[key] = (now, ok)
     return ok
 
+def get_host_ip():
+    try:
+        if platform.system() == "Windows":
+            return socket.gethostbyname(socket.gethostname())
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
+
 def get_icon_for_service(image):
-    image = image.split('@')[0]
     icon_map = {
         'postgres': 'postgresql',
         'portainer': 'portainer',
@@ -41,14 +59,7 @@ def get_icon_for_service(image):
     return "/static/icons/generic.png"
 
 def load_settings():
-    settings = {
-        "base_ip": "",
-        "auto_refresh_seconds": 10,
-        "show_stopped": False,
-        "show_unmapped": False,
-        "overrides": {},
-        "sort_by": "name"
-    }
+    settings = default_settings.copy()
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE) as f:
             settings.update(json.load(f))
@@ -56,17 +67,10 @@ def load_settings():
         settings["base_ip"] = get_host_ip()
     return settings
 
-def get_host_ip():
-    try:
-        if platform.system() == "Windows":
-            return socket.gethostbyname(socket.gethostname())
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "localhost"
+def save_settings(data):
+    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+    with open(SETTINGS_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
 
 def get_swarm_services(settings):
     services = []
@@ -86,8 +90,7 @@ def get_swarm_services(settings):
                 proto = p.get("Protocol", "tcp")
                 if not port:
                     continue
-
-                ip = settings["overrides"].get(spec.get("Name", svc.name), settings["base_ip"])
+                ip = settings["base_ip"]
                 if proto == "tcp":
                     if check_port(ip, port, "http"):
                         web_ports.append((port, "http"))
@@ -107,7 +110,7 @@ def get_swarm_services(settings):
                 'image': image,
                 'web_ports': web_ports,
                 'other_ports': other_ports,
-                'ip': ip,
+                'ip': settings["base_ip"],
                 'icon': icon,
                 'status': mode.lower(),
                 'is_swarm': True
@@ -151,7 +154,6 @@ def build_container_data(settings):
                 non_web_ports.append(f"{p}/tcp")
 
         image_name = c.image.tags[0] if c.image.tags else c.image.short_id
-        image_name = image_name.split('@')[0]
         icon = get_icon_for_service(image_name)
 
         containers.append({
@@ -168,7 +170,6 @@ def build_container_data(settings):
     all_items = containers + get_swarm_services(settings)
 
     sort_by = settings.get("sort_by", "name")
-
     def sort_key(c):
         if sort_by == "status":
             return c["status"]
