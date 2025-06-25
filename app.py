@@ -68,6 +68,55 @@ def save_settings(data):
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(data, f, indent=2)
 
+def get_swarm_services(settings):
+    services = []
+    try:
+        for svc in client.services.list():
+            spec = svc.attrs.get("Spec", {})
+            task_template = spec.get("TaskTemplate", {})
+            container_spec = task_template.get("ContainerSpec", {})
+            endpoint = svc.attrs.get("Endpoint", {})
+            ports = endpoint.get("Ports", [])
+            mode = list(spec.get("Mode", {}).keys())[0]
+
+            web_ports = []
+            other_ports = []
+            for p in ports:
+                port = p.get("PublishedPort")
+                proto = p.get("Protocol", "tcp")
+
+                if not port:
+                    continue
+
+                ip = settings["base_ip"]
+                if proto == "tcp":
+                    if port_has_http(ip, port):
+                        web_ports.append((port, "http"))
+                    elif port_has_https(ip, port):
+                        web_ports.append((port, "https"))
+                    else:
+                        other_ports.append(f"{port}/tcp")
+                elif proto == "udp":
+                    other_ports.append(f"{port}/udp")
+
+            image = container_spec.get("Image", "unknown")
+            name = spec.get("Name", svc.name)
+            icon = get_icon_for_service(image)
+
+            services.append({
+                'name': name,
+                'image': image,
+                'web_ports': web_ports,
+                'other_ports': other_ports,
+                'ip': settings["base_ip"],
+                'icon': icon,
+                'status': mode.lower(),
+                'is_swarm': True
+            })
+    except Exception as e:
+        print(f"Error getting swarm services: {e}")
+    return services
+
 def build_container_data(settings):
     containers = []
     all_containers = sorted(
@@ -75,6 +124,8 @@ def build_container_data(settings):
         key=lambda c: c.name.lower()
     )
     for c in all_containers:
+        if "com.docker.swarm.service.name" in c.labels:
+            continue  # skip Swarm task containers
         if c.name == "harbormaster":
             continue
 
@@ -102,7 +153,7 @@ def build_container_data(settings):
             if scheme:
                 web_ports.append((p, scheme))
             else:
-                non_web_ports.append(p)
+                non_web_ports.append(f"{p}/tcp")
 
         image_name = c.image.tags[0] if c.image.tags else c.image.short_id
         icon = get_icon_for_service(image_name)
@@ -114,8 +165,11 @@ def build_container_data(settings):
             'other_ports': non_web_ports,
             'ip': ip,
             'icon': icon,
-            'status': c.status
+            'status': c.status,
+            'is_swarm': False
         })
+
+    all_items = containers + get_swarm_services(settings)
 
     sort_by = settings.get("sort_by", "name")
 
@@ -128,7 +182,7 @@ def build_container_data(settings):
             return c["image"].lower()
         return c["name"].lower()
 
-    return sorted(containers, key=sort_key)
+    return sorted(all_items, key=sort_key)
 
 @app.route('/')
 def index():
@@ -145,12 +199,9 @@ def container_grid():
 @app.route('/settings', methods=['POST'])
 def update_settings():
     current = load_settings()
-
-    # Update submitted values, preserve others
     current["sort_by"] = request.form.get("sort_by", current.get("sort_by", "name"))
     current["base_ip"] = request.form.get("base_ip", current.get("base_ip", "localhost"))
     current["auto_refresh_seconds"] = int(request.form.get("auto_refresh_seconds", current.get("auto_refresh_seconds", 10)))
-
     current["show_stopped"] = "show_stopped" in request.form or current.get("show_stopped", False)
     current["show_unmapped"] = "show_unmapped" in request.form or current.get("show_unmapped", False)
 

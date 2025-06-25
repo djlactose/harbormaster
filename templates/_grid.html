@@ -1,18 +1,35 @@
 <div class="container-grid">
   {% for c in containers %}
-    <div class="container-card" data-has-web="{{ 'yes' if c.web_ports else 'no' }}">
+    <div class="container-card" data-has-web="{{ 'yes' if c.web_ports else 'no' }}" data-container="{{ c.name }}" {% if c.is_swarm %}data-is-swarm="true"{% endif %}>
       <div class="header">
         <span class="status-dot {{ c.status }}"></span>
         <img src="{{ c.icon }}" class="icon" alt="icon" onerror="this.src='/static/icons/generic.png'">
         <div>
-          <strong>{{ c.name }}</strong><br>
+          <strong>
+            {{ c.name }}
+            {% if c.is_swarm %}
+              <img src="/static/icons/swarm.png" alt="Swarm" title="Swarm service" style="height: 16px; vertical-align: middle; margin-left: 4px;">
+            {% endif %}
+          </strong><br>
           <div class="image-name">{{ c.image }}</div>
         </div>
       </div>
-    {% if c.web_ports %}
+      {% if c.web_ports %}
         <img class="thumbnail" src="/thumbnail/{{ c.name }}_{{ c.web_ports[0][0] }}" onerror="this.onerror=null; this.src='/static/icons/no-thumb.png';">
-    {% endif %}
+      {% endif %}
       <div class="ports">
+        <div>
+          <strong>IP:</strong>
+          <span class="ip-display">{{ c.ip }}</span>
+          {% if not c.is_swarm %}
+            <span class="ip-edit" onclick="editIp(this)">[Edit]</span>
+          {% endif %}
+        </div>
+        <div class="ip-input" style="display:none;">
+          <input type="text" value="{{ c.ip }}">
+          <button onclick="saveIp(this)">Save</button>
+          <button onclick="cancelIp(this)">Cancel</button>
+        </div>
         {% if c.web_ports %}
           <strong>Web Ports:</strong><br>
           {% for p, scheme in c.web_ports %}

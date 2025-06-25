@@ -87,6 +87,9 @@ a:hover {
   transition: background 0.3s, box-shadow 0.3s;
   border-top: 4px solid var(--accent);
 }
+.container-card[data-is-swarm="true"] {
+  border-left: 4px solid #33c;
+}
 .header {
   display: flex;
   align-items: center;
